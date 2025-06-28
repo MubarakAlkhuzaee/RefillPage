@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Refill QR Label Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+
+    #labels {
+      display: block;
+    }
+
+    .label {
+      width: 75mm;
+      height: 50mm;
+      padding: 6mm;
+      box-sizing: border-box;
+      page-break-after: always;
+      border: 1px dashed #aaa;
+      text-align: center;
+    }
+
+    .label strong {
+      font-size: 6pt;
+    }
+
+    .label small {
+      font-size: 6pt;
+    }
+
+    .label canvas {
+      margin-top: 5px;
+    }
+
+    @media print {
+      body {
+        margin: 0;
+      }
+
+      .label {
+        page-break-after: always;
+        border: none;
+      }
+
+      #uploadSection, #printButton {
+        display: none;
+      }
+
+      @page {
+        size: 75mm 50mm;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="uploadSection">
+  <h2>Upload Patient Excel File</h2>
+  <input type="file" id="fileInput" accept=".xlsx, .xls" />
+  <br><br>
+  <button onclick="window.print()" id="printButton">🖨️ Print Labels</button>
+</div>
+
+<div id="labels"></div>
+
+<script>
+document.getElementById("fileInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+
+  // Send to backend (optional)
+  const formData = new FormData();
+  formData.append("file", file);
+  try {
+    await fetch("https://ab73-2a02-cb80-4098-8bea-9527-5a95-28e8-f0ac.ngrok-free.app/upload_excel", {
+      method: "POST",
+      body: formData
+    });
+  } catch (err) {
+    console.warn("Backend not reachable — continuing with QR generation only.");
+  }
+
+  // Read Excel
+  const reader = new FileReader();
+  reader.onload = function (event) {
+    const data = new Uint8Array(event.target.result);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet);
+
+    const container = document.getElementById("labels");
+    container.innerHTML = "";
+
+    json.forEach((row, i) => {
+      const mrn = row["MRN"];
+      const name = row["Pt Name"];
+      if (!mrn || !name) return;
+
+      const div = document.createElement("div");
+      div.className = "label";
+      div.innerHTML = `
+        <strong>${name}</strong><br>
+        <small>MRN: ${mrn}</small><br>
+        <canvas id="qr-${i}"></canvas>
+      `;
+      container.appendChild(div);
+
+      QRCode.toCanvas(document.getElementById(`qr-${i}`), String(mrn), {
+        width: 100,
+        margin: 0
+      });
+    });
+  };
+
+  reader.readAsArrayBuffer(file);
+});
+</script>
+
+</body>
+</html>
